@@ -1,0 +1,6 @@
+pyodbc
+netmiko
+paramiko
+librouteros
+pysnmp
+telebot
