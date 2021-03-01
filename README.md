@@ -1,1 +1,1 @@
-# Modules_for_work
+# Modules for work with dlink, mikrotik, zywall, mssql, telegram
