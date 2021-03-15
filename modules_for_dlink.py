@@ -11,6 +11,7 @@ from sql_functions import *
 import time
 import os
 import re
+import sys
 import config
 import datetime
 import telnetlib
@@ -54,7 +55,6 @@ def get_model_snmp(ip, com_data=SNMP_PUBLIC):
 
             for line in varBinds:
                 # Конвертируем ответ в строку для работы с ним и разделяем по знаку '='
-                #print(line)
                 line = str(line).split('=')
 
                 # Проверяем, является ли хост HP
@@ -458,7 +458,12 @@ def save_conf(ip, oid):
     """
 
     result = save_config_snmp(ip, oid)
-    return 'Success!' if not result else f'{result}'
+    if not result:
+        return 'Success!'
+    else:
+        mess = f"Host {ip} get error while trying save config via snmp"
+        write_log(sys.argv[0], '3', mess)
+        return False
 
 
 def get_loca_name_snmp(ip, oid, com_data=SNMP_PUBLIC):
@@ -480,8 +485,7 @@ def get_loca_name_snmp(ip, oid, com_data=SNMP_PUBLIC):
 
         # Выводим ошибку в случае отсутствия ответа от хоста
         if errorIndication or errorStatus:
-            print(errorIndication or errorStatus)
-            break
+            return errorIndication or errorStatus
 
         else:
 
@@ -631,7 +635,11 @@ def set_pass(ip, oid_pass, oid_save, old_pass=PASSWORD_DLINK_OLD, new_pass=PASSW
         if oid_pass == '0':
             print(ip, end=', ')
             res_change = set_pass_telnet(ip, old_pass, new_pass)
-            print('change successfull, save successfull!' if res_change == 'Success' else 'что-то пошло не так')
+            if res_change == 'Success':
+                print('change successfull, save successfull!')
+            else:
+                mess = f"Host {ip} get error while trying change password and save config via telnet"
+                write_log(sys.argv[0], '3', mess)
 
         # Для устройств с нормальным snmp
         else:
@@ -639,10 +647,14 @@ def set_pass(ip, oid_pass, oid_save, old_pass=PASSWORD_DLINK_OLD, new_pass=PASSW
 
             # Меняем пароль
             res_change = set_pass_snmp(ip, oid_pass, new_pass)
-            print('change successfull' if not res_change else f'{res_change}', end=', ')
+            if not res_change:
+                print('change successfull!', end=', ')
+            else:
+                mess = f"Host {ip} get error while changing config via snmp"
+                write_log(sys.argv[0], '3', mess)
 
             res_save = save_config_snmp(ip, oid_save)
-            print('save successfull!' if not res_save else f'{res_save}')
+            print('save successfull!' if not res_save else 'Что-то пошло не так')
 
     except:
         print('Error')
@@ -1309,12 +1321,13 @@ def get_mac_snmp_to_sql(ip, model, com_data=SNMP_PUBLIC):
                           CommunityData(com_data),
                           UdpTransportTarget((ip, 161)),
                           ContextData(),
-                          ObjectType(ObjectIdentity(f'.1.3.6.1.2.1.17.7.1.2.2.1.2'))):
+                          ObjectType(ObjectIdentity('.1.3.6.1.2.1.17.7.1.2.2.1.2'))):
 
         # Выводим ошибку в случае чего
         if errorIndication or errorStatus:
+            mess = f"Can't get mac from {ip} via snmp"
+            write_log('get_mac_snmp_to_sql', '2', mess)
             return errorIndication or errorStatus
-            break
 
         else:
 

@@ -32,7 +32,7 @@ keyboard1 = telebot.types.ReplyKeyboardMarkup(True, True)
 keyboard1.row('Покажи', 'Пинг', 'Ребут')
 keyboard1.row('Номер', 'Дхцп', 'Арп')
 keyboard1.row('Мак', 'Инет', 'Секур')
-keyboard1.row('Влан', 'Порты')
+keyboard1.row('Влан', 'Порты', 'Ипсек')
 
 # Списки для обработки команд
 Answers = ['Ой фсё!', 'Пиши нормально!', 'Да ну тебя!', 'Я с тобой не разговариваю!', 'Отстань, противный!', 'Изыди!']
@@ -49,6 +49,8 @@ Inets = ['inet', 'инет', ]
 Securs = ['secur', 'секур', ]
 Vlans = ['влан', 'vlan', ]
 Ports = ['порты', 'ports', ]
+Logs = ['лог', 'log', 'logs', 'логи', ]
+Ipsec = ['ипсек', 'ipsec', ]
 
 # Функция для вывода помощи
 @bot.message_handler(commands=['start'])
@@ -61,16 +63,26 @@ def start_message(message):
     # Если сообщение пришло от проверенного пользователя
     if message.from_user.id in Good_id.keys():
 
+        # Пишем в лог
+        logs = f"{Good_id[message.from_user.id]} wrotes a message {message.text}"
+        write_log('telegram', '1', logs)
+
+        # Пишем в файл
         with open ('bot_known.log', 'a') as f:
             print(f"{date_sms} писал {Good_id[message.from_user.id]} сообщение {message.text}", file=f)
+
         bot.send_message(message.chat.id, 'Нажмите на кнопку для вывода справки о соответствующей команде', reply_markup=keyboard1)
 
     # Если пользователя нет в числе проверенных выводим сообщение и добавляем его в лог-файл
     else:
         bot.send_message(message.chat.id, f'{message.from_user.id}, я тебя не знаю!')
 
-        with open ('bot_unknown.log', 'a') as f:
+        # Пишем в лог
+        logs = f"Someone an unknown {message.from_user.id} writes to the bot message {message.text}"
+        write_log('telegram', '3', logs)
 
+        # Пишем в файл
+        with open ('bot_unknown.log', 'a') as f:
             print(f"{date_sms} писал {message.from_user.id} сообщение {message.text}", file=f)
 
 
@@ -88,6 +100,11 @@ def reading_commands(message):
     # Если сообщение пришло от проверенного пользователя
     if message.from_user.id in Good_id.keys():
 
+        # Пишем в лог
+        logs = f"{Good_id[message.from_user.id]} wrotes a message {message.text}"
+        write_log('telegram', '1', logs)
+
+        # Пишем в файл
         with open ('bot_known.log', 'a') as f:
             print(f"{date_sms} писал {Good_id[message.from_user.id]} сообщение {message.text}", file=f)
         
@@ -479,7 +496,7 @@ def reading_commands(message):
                                                   '(Vlan) (ip хоста) (порт) (влан)\n'
                                                   'Изменения сразу сохраняются в конфиг\n')
 
-        # Если начинается на секур - проверяем, чтобы было 4 октета во второй части сообщения
+        # Если начинается на влан - проверяем, чтобы было 4 октета во второй части сообщения
         # и пробуем пингануть адрес
         elif mess[0] in Vlans and len(mess[1].split('.')) == 4:
 
@@ -584,7 +601,7 @@ def reading_commands(message):
             else:
                 bot.send_message(message.chat.id, "Хост недоступен")
 
-        # Справочная инфа о Секур
+        # Справочная инфа о Порты
         elif mess[0] in Ports and len(mess) == 1:
             bot.send_message(message.chat.id, 'Для проверки активных портов на роутере писать сообщение вида:\n'
                                               'Порты 172.23.230.1\n'
@@ -606,7 +623,7 @@ def reading_commands(message):
                     if 'ZyWALL' in model:
                         result = get_ports_zywall(mess[1], model)
                     else:
-                        reuslt = get_ports_mikrotik(mess[1])
+                        result = get_ports_mikrotik(mess[1])
                     # Если ответ вернулся - создаём временную переменную
                     if result:
 
@@ -629,16 +646,86 @@ def reading_commands(message):
             else:
                 bot.send_message(message.chat.id, "Хост недоступен")
 
+        # Справочная инфа о Ипсек
+        elif mess[0] in Ipsec and len(mess) == 1:
+            bot.send_message(message.chat.id, 'Для проверки, с какого интерфейса поднят ipsec, писать сообщение вида:\n'
+                                              'Ипсек 172.23.230.1\n'
+                                              'или\n'
+                                              'Ipsec 172.23.230.1\n')
+
+        # Если начинается на ипсек - проверяем, чтобы во второй части сообщения было 4 октета
+        elif mess[0] in Ipsec and len(mess[1].split('.')) == 4:
+
+            # Проверяем, доступен ли хост
+            if ping_host(mess[1]):
+
+                # Подключаемся к базе и делаем запрос модели по ip
+                cursor = connect_to_DB()
+                result = cursor.execute(f"SELECT Model FROM Routers WHERE IP = '{mess[1]}'")
+                # Смотрим что в результате и в зависимости от этого обращаемся к одной из функций
+                try:
+                    model = next(result)[0]
+                    if 'ZyWALL' in model:
+                        result = check_ipsec_zywall(mess[1])
+                    else:
+                        result = check_ipsec_mikrotik(mess[1])
+                    # Если ответ вернулся - создаём временную переменную
+                    if result:
+
+                        # В зависимости от модели выводим ответ:
+                        if 'ZyWALL' in model:
+                            bot.send_message(message.chat.id, f"На хосте {mess[1]} поднято соединение с интерфейса {result[0]} с адресом {result[2]}")
+                        else:
+                            bot.send_message(message.chat.id, f"На хосте {mess[1]} поднято соединение с интерфейса {result['interface']} с адресом {result['address'][:-3]}")
+                        # Закрываем соединение с базой
+                        cursor.close()
+
+                    # Если в ответе функции False - выводим инфо об этом
+                    else:
+                        bot.send_message(message.chat.id, f"На магазе {mess[1]} что-то пошло не так")
+                        cursor.close()
+
+                # Если в базе не нашлась модель роутера - выводим следующее сообщение и закрываем соединение с базой
+                except StopIteration:
+                    bot.send_message(message.chat.id, "Не знаю такой роутер")
+                    cursor.close()
+
+            # Если хост недоступен - выводим следующее сообщение
+            else:
+                bot.send_message(message.chat.id, "Хост недоступен")
+
         # Рассылка всем пользователям, добавленным в одобренные
-        elif mess[0] == 'рассылка' and str(message.from_user.id) in CAP:
+        elif mess[0] == 'рассылка' and message.from_user.id in CAP:
             for line in Good_id.keys():
                 bot.send_message(line, message.text[8:])
 
         # Рассылка всем пользователям, добавленным в одобренные
-        elif mess[0] == 'рассылка_офис' and str(message.from_user.id) in CAP:
+        elif mess[0] == 'рассылка_офис' and message.from_user.id in CAP:
             for line in Good_id.keys():
                 bot.send_message(line, message.text[13:])
 
+        # Вывод логов с различными параметрами
+        elif mess[0] in Logs and message.from_user.id in CAP:
+
+            dict_logs = {'дата': '',
+                         'топ': '10',
+                         'скрипт': '',
+                         'мес': '',
+                         'лвл': '',
+                         }
+
+            if len(mess) >= 3:
+
+                for x in range(len(mess)):
+                    if mess[x] in dict_logs.keys():
+                        dict_logs[mess[x]] = mess[x+1]
+
+            result = get_logs(date_get=dict_logs['дата'], top=int(dict_logs['топ']), script=dict_logs['скрипт'], mess=dict_logs['мес'], level=dict_logs['лвл'])
+            res = ''
+            for date, script, info, level in result:
+                res += f"{level} {str(date)[:-7]} {script}:\n{info}\n\n"
+
+            bot.send_message(message.chat.id, f"Последние {dict_logs['топ']} сообщений:\n\n{res}")
 
         # Заглушка на случай если сообщение не прошло в остальные ветки
         else:
@@ -646,7 +733,13 @@ def reading_commands(message):
 
     # Если пользователя нет в числе проверенных выводим сообщение и добавляем его в лог-файл
     else:
+
         bot.send_message(message.chat.id, f'{message.from_user.id}, я тебя не знаю!')
+
+        # Пишем в лог
+        logs = f"Someone an unknown {message.from_user.id} writes to the bot message {message.text}"
+        write_log('telegram', '3', logs)
+
         with open ('bot_unknown.log', 'a') as f:
             print(f"{date_sms} писал {message.from_user.id} {message.from_user.username} {message.from_user.first_name} {message.from_user.last_name} сообщение {message.text}", file=f)
 

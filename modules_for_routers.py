@@ -62,6 +62,8 @@ def reboot_zywall(ip, user=USER, password=PASSWORD):
                 return False
 
     except:
+        mess = f"Somethink went wrong while trying to reboot ZyWALL {ip}"
+        write_log('reboot_zywall', '3', mess)
         return False
 
     time.sleep(1)
@@ -77,33 +79,36 @@ def reboot_mikrotik(ip, user=USER, password=PASSWORD):
     Ребут хоста, принимает ip хоста, логин и пароль.
     Возвращает True или False в зависимости от результата
     """
+    try:
+        # Порт для подключения
+        port = '23'
 
-    # Порт для подключения
-    port = '23'
+        command_1 = 'system reboot'
+        command_2 = 'y'
 
-    command_1 = 'system reboot'
-    command_2 = 'y'
+        # Создаём подключение с явно указанным портом и без
+        tn = telnetlib.Telnet(ip, port, timeout=10)
+        tn = telnetlib.Telnet(ip, timeout=10)
 
-    # Создаём подключение с явно указанным портом и без
-    tn = telnetlib.Telnet(ip, port, timeout=10)
-    tn = telnetlib.Telnet(ip, timeout=10)
+        # Вводим логин и пароль
+        tn.read_until(b": ")
+        tn.write(user.encode('UTF-8') + b"\n")
+        tn.read_until(b"word: ")
+        tn.write(password.encode('UTF-8') + b"\n")
 
-    # Вводим логин и пароль
-    tn.read_until(b": ")
-    tn.write(user.encode('UTF-8') + b"\n")
-    tn.read_until(b"word: ")
-    tn.write(password.encode('UTF-8') + b"\n")
+        # Вводим команды
+        tn.read_until(b'>')
+        tn.write(command_1.encode('UTF-8') + b"\r\n")
+        time.sleep(1)
 
-    # Вводим команды
-    tn.read_until(b'>')
-    tn.write(command_1.encode('UTF-8') + b"\r\n")
-    time.sleep(1)
+        tn.write(command_2.encode('UTF-8') + b"\r\n")
+        time.sleep(1)
+    except:
+        mess = f"Somethink went wrong while trying to reboot MikroTik {ip}"
+        write_log('reboot_mikrotik', '3', mess)
 
-    tn.write(command_2.encode('UTF-8') + b"\r\n")
-    time.sleep(1)
-
-    # Если хост не пингуется - возвращает True, иначе False
-    return False if ping_host(ip) else True
+        # Если хост не пингуется - возвращает True, иначе False
+        return False if ping_host(ip) else True
 
 
 # Вывод информации по dhcp с зивола
@@ -148,6 +153,8 @@ def get_dhcp_zywall(ip, user=USER, password=PASSWORD):
 
     # Если что-то пошло не так - возвращаем False
     except:
+        mess = f"Somethink went wrong while trying to get dhcp from ZyWALL {ip}"
+        write_log('get_dhcp_zywall', '3', mess)
         return False
 
 
@@ -187,6 +194,8 @@ def get_dhcp_mikrotik(ip, user=USER, password=PASSWORD):
 
     # Если что-то пошло не так - возвращаем False
     except:
+        mess = f"Somethink went wrong while trying to get dhcp from MikroTik {ip}"
+        write_log('get_dhcp_mikrotik', '3', mess)
         return False
 
 
@@ -233,6 +242,8 @@ def get_arp_zywall(ip, user=USER, password=PASSWORD):
 
     # Если что-то пошло не так - возвращаем False
     except:
+        mess = f"Somethink went wrong while trying to get arp from ZyWALL {ip}"
+        write_log('get_arp_zywall', '3', mess)
         return False
 
 
@@ -271,19 +282,51 @@ def get_arp_mikrotik(ip, user=USER, password=PASSWORD):
 
     # Если что-то пошло не так - возвращаем False
     except:
+        mess = f"Somethink went wrong while trying to get arp from MikroTik {ip}"
+        write_log('get_arp_mikrotik', '3', mess)
         return False
     
 
 # Функция для редактирования конфига зивола
-def edit_rule_zywall(ip, New_info, user=USER, password=PASSWORD):
+def edit_rule_zywall(ip, New_info, condition, user=USER, password=PASSWORD):
 
     """
     Редактирование конфига зивола, принимает ip хоста, список команд, логин и пароль.
     Возвращает False или True в зависимости от результата
     """
 
-    # Пробуем подключиться к хосту через ssh и выполнить команду
     try:
+        # Получаем список существующих правил
+        firewall = get_firewall_zywall(ip, user, password)
+
+        # Переменная для проверки, существует ли уже правило
+        cool = False
+
+        # Идём по списку правил
+        for fire in firewall:
+
+            # Сохраняем правило во временную переменную
+            temp_fire = fire
+
+            # Идём по шаблону нужного правила
+            for i in condition.keys():
+
+                # Убираем из правила строки, пустые в шаблоне
+                if not condition[i]:
+                    fire[i] = ''
+
+            # Сравниваем получившееся правило с шаблоном
+            if fire == condition:
+                print(f"The rule is already exists on the host {ip}, its cool!")
+                cool = True
+
+        # Если правило уже есть - выходим из функции
+        if cool:
+            return True
+
+
+
+        # Пробуем подключиться к хосту по ssh и выполнить команду
         with pexpect.spawn('ssh {}@{}'.format(user, ip), timeout=10) as ssh:
             ssh.expect('Password:')
             ssh.sendline(password)
@@ -312,6 +355,8 @@ def edit_rule_zywall(ip, New_info, user=USER, password=PASSWORD):
 
     # Если что-то пошло не так - возвращаем False
     except:
+        mess = f"Somethink went wrong while trying to edit firewall on ZyWALL {ip}"
+        write_log('edit_rule_zywall', '3', mess)
         print('Ошибка на хосте', ip)
         return False
 
@@ -406,6 +451,8 @@ def checking_hosts_zywall(subnet, user=USER, password=PASSWORD):
 
     # Если что-то пошло не так - возвращаем False
     except:
+        mess = f"Somethink went wrong while trying to check hosts on ZyWALL {ip}"
+        write_log('checking_hosts_zywall', '3', mess)
         return False
 
 
@@ -490,6 +537,8 @@ def check_inet_zywall(ip, user=USER, password=PASSWORD):
             return itog
 
     except:
+        mess = f"Somethink went wrong while trying to check inet on ZyWALL {ip}"
+        write_log('check_inet_zywall', '3', mess)
         return False
 
 
@@ -533,7 +582,7 @@ def check_int_mikrotik_telnet(ip, interface, user, password):
 
     # Идём по строкам и проверяем, были ли 100% потери
     for line in lines:
-        if "packet-loss=\\x1b[m100%" in line:
+        if "=\\x1b[m100%" in line:
             tn.close()
             return 'Мёртв'
     
@@ -580,6 +629,8 @@ def check_inet_mikrotik(ip, user=USER, password=PASSWORD):
         return itog
 
     except:
+        mess = f"Somethink went wrong while trying to check inet on MikroTik {ip}"
+        write_log('check_inet_mikrotik', '3', mess)
         return False
 
 
@@ -623,8 +674,10 @@ def enable_ssh_zywall(ip, user=USER, password=PASSWORD):
         tn.read_until(b'#', timeout=10)
         tn.close()
 
-    # Если в ходе проверки возникла какая-то ошибка, возвращаем 'Мёртв'
+    # Если в ходе проверки возникла какая-то ошибка, возвращаем False
     except:
+        mess = f"Somethink went wrong while trying to enable ssh on ZyWALL {ip}"
+        write_log('enable_ssh_zywall', '3', mess)
         return False
 
     return True
@@ -686,11 +739,13 @@ def enable_ssh_mikrotik(ip, command_1 = 'ip service print', user=USER, password=
             return True
     
     except:
+        mess = f"Somethink went wrong while trying to enable ssh on MikroTik {ip}"
+        write_log('enable_ssh_mikrotik', '3', mess)
         return False
 
 
 # Функция для получение ssh ключа
-def ssh_key(ip, user=USER):
+def ssh_key(ip, user=USER, checker=True ):
 
     """
     Получение ssh ключа, принимает ip и логин.
@@ -710,7 +765,11 @@ def ssh_key(ip, user=USER):
 
             # Если в процессе возникла ошибка, что этому хосту принадлежит другой ключ - удаляем старый
             except pexpect.exceptions.EOF:
+                mess = f"Ssh key on the host {ip} has changed, delete the old key"
+                write_log('ssh_key', '2', mess)
                 os.system(f"ssh-keygen -f '/home/scripts/.ssh/known_hosts' -R '{ip}'")
+                if checker:
+                    ssh_key(ip, user, False)
                 return True
 
             # Возникает ошибка, когда ключ уже есть или проблемы с хостом
@@ -719,11 +778,17 @@ def ssh_key(ip, user=USER):
 
     # Иногда ошибка вываливается на разных обработки
     except pexpect.exceptions.EOF:
+        mess = f"Ssh key on the host {ip} has changed, delete the old key"
+        write_log('ssh_key', '2', mess)
         os.system(f"ssh-keygen -f '/home/scripts/.ssh/known_hosts' -R '{ip}'")
+        if checker:
+            ssh_key(ip, user, False)
         return True
 
     # Если всё пошло не так
     except:
+        mess = f"Some error on the host {ip} while trying to get the ssh key"
+        write_log('ssh_key', '2', mess)
         return False
 
 
@@ -754,7 +819,8 @@ def check_mikrotik(ip, user=USER, password=PASSWORD_OLD, new_password=PASSWORD):
 
     # Другие исключения - что-то странное с хостом
     except:
-        print('Ошибка на хосте', ip)
+        mess = f"Error on the MikroTik {ip} while checking the password"
+        write_log('check_mikrotik', '3', mess)
         return 'Ошибка'
 
     # Если функция запускалась со старым паролем и подключилось успешно
@@ -793,6 +859,8 @@ def check_zywall(ip, user=USER, password=PASSWORD_OLD):
 
             # Если не увидим символ - возвращаем False
             except pexpect.exceptions.TIMEOUT:
+                mess = f"Error on the ZyWALL {ip} while checking the password"
+                write_log(sys.argv[0], '3', mess)
                 return False
 
             # Если подключались со старым паролем и подключились успешно - выполняем команды для его смены
@@ -813,9 +881,13 @@ def check_zywall(ip, user=USER, password=PASSWORD_OLD):
 
     # Возвращаем ответ в зависимости от ошибки
     except pexpect.exceptions.TIMEOUT:
+        mess = f"Error on the ZyWALL {ip} while checking the password"
+        write_log('check_zywall', '3', mess)
         return 'Ошибка подключения'
 
     except:
+        mess = f"Error on the ZyWALL {ip} while checking the password"
+        write_log('check_zywall', '3', mess)
         print('Ошибка на хосте', ip)
         return 'Ошибка'
 
@@ -838,46 +910,34 @@ def rule_for_zywall(ip, user=USER, password=PASSWORD):
             return
         elif result == 'Ошибка':
 
-            # Пишем лог в файл
-            with open('error_pass.log', 'a') as f1:
-                now = str(datetime.now()).split('.')
-                print(f'В ходе проверки хоста ZyWALL {ip} в {now[0]} что-то пошло не так\n', file=f1)
-            return
+            # Пишем в лог
+            mess = f"Something wrong on the ZyWALL {ip} while checking the password"
+            write_log('rule_for_zywall', '3', mess)
+            return False
 
     else:
         result = check_zywall(ip)
         if result == True:
 
-            # Пишем лог в файл
-            with open('change_pass.log', 'a') as f2:
-                now = str(datetime.now()).split('.')
-                print(f'Смена пароля на хосте {ip} в {now[0]} удалась\n', file=f2)
-            return
+            # Пишем в лог
+            mess = f"Changing the password on ZyWALL {ip} successed"
+            write_log('rule_for_zywall', '1', mess)
+            return True
 
         elif result == 'Ошибка':
 
-            # Пишем лог в файл
-            with open('error_pass.log', 'a') as f1:
-                now = str(datetime.now()).split('.')
-                print(f'В ходе смены пароля на хосте ZyWALL {ip} в {now[0]} что-то пошло не так\n', file=f1)
-            return
+            return False
 
         elif result == 'Ошибка подключения':
 
-            # Пишем лог в файл
-            with open('error_pass.log', 'a') as f1:
-                now = str(datetime.now()).split('.')
-                print(f'Не удалось повторно подключиться на устройство ZyWALL {ip} в {now[0]}\n', file=f1)
+            return False
 
-            return
         elif result == False:
 
-            # Пишем лог в файл
-            with open('error_pass.log', 'a') as f1:
-                now = str(datetime.now()).split('.')
-                print(f'Старый пароль на ZyWALL {ip} в {now[0]} тоже не подошёл!\n', file=f1)
-
-            return
+            # Пишем в лог
+            mess = f"The old password did not work on ZyWALL {ip} too"
+            write_log('rule_for_zywall', '3', mess)
+            return False
 
 
 # Основная логика для проверки микротика
@@ -896,40 +956,31 @@ def rule_for_mikrotik(ip, user=USER, password=PASSWORD):
 
         if result == 'Ошибка':
 
-            # Пишем лог в файл
-            with open('error_pass.log', 'a') as f1:
-                now = str(datetime.now()).split('.')
-                print(f'В ходе проверки хоста MikroTik {ip} в {now[0]} что-то пошло не так\n', file=f1)
+            return False
 
-            return
+        return True
 
     else:
 
         result = check_mikrotik(ip)
         if result == True:
 
-            # Пишем лог в файл
-            with open('change_pass.log', 'a') as f2:
-                now = str(datetime.now()).split('.')
-                print(f'Смена пароля на хосте {ip} в {now[0]} удалась\n', file=f2)
+            # Пишем в лог
+            mess = f"Changing the password on MikroTik {ip} successed"
+            write_log('rule_for_mikrotik', '1', mess)
+            return True
 
-            return
         elif result == 'Ошибка':
 
-            # Пишем лог в файл
-            with open('error_pass.log', 'a') as f1:
-                now = str(datetime.now()).split('.')
-                print(f'В ходе смены пароля на хосте MikroTik {ip} в {now[0]} что-то пошло не так\n', file=f1)
+            return False
 
-            return
         elif result == False:
 
-            # Пишем лог в файл
-            with open('error_pass.log', 'a') as f1:
-                now = str(datetime.now()).split('.')
-                print(f'Старый пароль на MikroTik {ip} в {now[0]} тоже не подошёл!\n', file=f1)
+            # Пишем в лог
+            mess = f"The old password did not work on MikroTik {ip} too"
+            write_log('rule_for_mikrotik', '3', mess)
 
-            return
+            return False
 
 
 # Включает порт для взаимодействия с микротиком через api
@@ -977,40 +1028,47 @@ def check_version(ip, model, user = USER, password = PASSWORD, checker = True):
     Возвращает версию прошивки.
     """
 
-    # Порт для подключения
-    port = '23'
+    try:
+        # Порт для подключения
+        port = '23'
 
-    # Для разных моделей разные команды
-    if 'ZyWALL' in model:
-        command_1 = 'show version'
-        command_2 = 'exit'
-    else:
-        command_1 = 'system resource print'
-        command_2 = 'quit'
+        # Для разных моделей разные команды
+        if 'ZyWALL' in model:
+            command_1 = 'show version'
+            command_2 = 'exit'
+        else:
+            command_1 = 'system resource print'
+            command_2 = 'quit'
 
-    # Создаём подключение с явно указанным портом и без
-    tn = telnetlib.Telnet(ip, port, timeout=10)
-    tn = telnetlib.Telnet(ip, timeout=10)
+        # Создаём подключение с явно указанным портом и без
+        tn = telnetlib.Telnet(ip, port, timeout=10)
+        tn = telnetlib.Telnet(ip, timeout=10)
 
-    # Вводим логин и пароль
-    tn.read_until(b": ")
-    tn.write(user.encode('UTF-8') + b"\n")
-    tn.read_until(b"word: ")
-    tn.write(password.encode('UTF-8') + b"\n")
+        # Вводим логин и пароль
+        tn.read_until(b": ")
+        tn.write(user.encode('UTF-8') + b"\n")
+        tn.read_until(b"word: ")
+        tn.write(password.encode('UTF-8') + b"\n")
 
-    # Вводим команды и обрабатываем строку в зависимости от модели
-    tn.read_until(b'>')
-    tn.write(command_1.encode('UTF-8') + b"\r\n")
-    time.sleep(1)
-    zywall = tn.read_until(b'>')
+        # Вводим команды и обрабатываем строку в зависимости от модели
+        tn.read_until(b'>')
+        tn.write(command_1.encode('UTF-8') + b"\r\n")
+        time.sleep(1)
+        zywall = tn.read_until(b'>')
 
-    tn.write(command_2.encode('UTF-8') + b"\r\n")
-    mikrotik = tn.read_all()
-    mikrotik = str(mikrotik).split('\\r')
-    zywall = str(zywall).split('\\r')
+        tn.write(command_2.encode('UTF-8') + b"\r\n")
+        mikrotik = tn.read_all()
+        mikrotik = str(mikrotik).split('\\r')
+        zywall = str(zywall).split('\\r')
 
-    # Возвращает строку в завимости от модели
-    return zywall if 'ZyWALL' in model else mikrotik
+        # Возвращает строку в завимости от модели
+        return zywall if 'ZyWALL' in model else mikrotik
+    except:
+
+        # Пишем в лог
+        mess = f"Some error on the host {ip} while trying to get firmware version"
+        write_log('check_version', '3', mess)
+        return False
 
 
 # Проверяем, присутствует ли ip в списке и добавляем в базу, если нет
@@ -1030,51 +1088,55 @@ def check_ip(model, ip, routers):
     elif 'ZyWALL' in model:
         ssh_key(ip)
         rule_for_zywall(ip)
-    else:
-        return
 
     # Получаем версию прошивки
     result = check_version(ip, model)
 
-    # В зависимости от модели обрабатываем строку и забираем из неё версию прошивки
-    if model == 'MikroTik':
-        regex_group = re.compile('version: (\S+) *\S+')
-        for line in result:
-            match = regex_group.search(line)
-            if match:
-                version = match.group(1)
-                break
-
-    elif ('110' in model) or ('USG20' in model):
-        regex_group = re.compile('\d + (\S+ \S+|\S+) +(\S+) +\S+ \S+ +(\S+)')
-        for line in result:
-            match = regex_group.search(line)
-            if match:
-                if match.group(3) == 'Running':
-                    version = match.group(2)
+    try:
+        # В зависимости от модели обрабатываем строку и забираем из неё версию прошивки
+        if model == 'MikroTik':
+            regex_group = re.compile('version: (\S+) *\S+')
+            for line in result:
+                match = regex_group.search(line)
+                if match:
+                    version = match.group(1)
                     break
 
-    else:
-        regex_group = re.compile('firmware version: (\S+)')
-        for line in result:
-            match = regex_group.search(line)
-            if match:
-                version = match.group(1)
-                break
+        elif ('110' in model) or ('USG20' in model):
+            regex_group = re.compile('\d + (\S+ \S+|\S+) +(\S+) +\S+ \S+ +(\S+)')
+            for line in result:
+                match = regex_group.search(line)
+                if match:
+                    if match.group(3) == 'Running':
+                        version = match.group(2)
+                        break
 
-    # Идём по списку роутеров из базы
-    for line in routers:
-        if line[0] == ip:
+        else:
+            regex_group = re.compile('firmware version: (\S+)')
+            for line in result:
+                match = regex_group.search(line)
+                if match:
+                    version = match.group(1)
+                    break
 
-            # Сверяем, если модель оборудования или прошивка не совпадает с записанной - обновляем запись
-            if line[1] != model or line[2] != version:
-                router_to_sql(ip, model, version, 'UPDATE')
+        # Идём по списку роутеров из базы
+        for line in routers:
+            if line[0] == ip:
 
-            return
+                # Сверяем, если модель оборудования или прошивка не совпадает с записанной - обновляем запись
+                if line[1] != model or line[2] != version:
+                    router_to_sql(ip, model, version, 'UPDATE')
 
-    # Если ip адрес не нашёлся в списке - добавляем запись в базу
-    router_to_sql(ip, model, version, 'INSERT')
-    return
+                return
+
+        # Если ip адрес не нашёлся в списке - добавляем запись в базу
+        router_to_sql(ip, model, version, 'INSERT')
+        return
+
+    except TypeError:
+        mess = f"Some error on the host {ip} while trying to get the version"
+        write_log('check_ip', '2', mess)
+        return False
 
 
 # Проверка хоста
@@ -1092,6 +1154,8 @@ def check_host(ip, routers):
         telnet = telnetlib.Telnet(ip, timeout=10)
 
     except:
+        mess = f"Can't connect to {ip} via telnet"
+        write_log('check_host', '3', mess)
         return False
 
     # Считывает приветствие и конвертируем в строку
@@ -1123,9 +1187,14 @@ def check_host(ip, routers):
         check_ip(model, ip, routers)
         
     elif 'Linux' in result:
+        mess = f"Host {ip} is Linux"
+        write_log(sys.argv[0], '2', mess)
         print(f"Host {ip} is Linux")
+        return True
 
     else:
+        mess = f"Host {ip} is strange"
+        write_log(sys.argv[0], '2', mess)
         return True
 
 
@@ -1432,10 +1501,7 @@ def get_firewall_zywall(ip, user = USER, password = PASSWORD):
                 itog.append({})
                 itog[k]['rule'] = k + 1
 
-            # В зависимости от пункта правила добавляем значение 
-            elif 'name' in word[0]:
-                itog[k]['name'] = word[1]
-
+            # В зависимости от пункта правила добавляем значение
             elif 'from' in word[0]:
                 itog[k]['from'] = word[1]
 
@@ -1535,6 +1601,386 @@ def get_config_zywall(ip, user = USER, password = PASSWORD):
 
     except:
         pass
+
+
+# Поиск wifi точки на зиволе
+def check_good_wifi_zywall(ip, wifis_db, user=USER, password=PASSWORD):
+
+    # Шаблон для поиска ответа на пинг
+    regex_group = re.compile('(\S+) +\w+ +(\S+) +\S +\S+')
+
+    # Шаблон для запуска пинга с сервера
+    massive=['ping', '-c', '2', '-n', '']
+
+    # Делим адрес на октеты и создаём с ними список для пинга
+    net = ip.split('.')
+    wifis = [f'172.{net[1]}.{net[2]}.10', f'172.{net[1]}.{net[2]}.11',  f'172.{net[1]}.{net[2]}.12', ]
+
+    try:
+        with pexpect.spawn('ssh {}@{}'.format(user, ip)) as ssh:
+            try:
+                ssh.expect('Password:')
+                ssh.sendline(password)
+            except (pexpect.exceptions.TIMEOUT):
+                mess = f"Cant connect to ZyWALL {ip} to find a good wifi"
+                write_log('check_good_wifi_zywall', '3', mess)
+                return False
+            ssh.expect('[>]')
+            time.sleep(0.5)
+
+            # Пингуем список адресов с сервера, чтобы на зиволе появились арпы с мак-адресами
+            for ip_ping in wifis:
+                massive[4]=(ip_ping)
+                result = subprocess.run([*massive], stdout=subprocess.PIPE, encoding='utf-8')
+
+            print(f'\nChecking host {ip}')
+
+            # Выводим арп-таблицу
+            ssh.sendline('show arp-table')
+            ssh.expect('[>]')
+            time.sleep(0.5)
+
+            # Сохраняем её в переменную
+            result=ssh.before.decode('ascii')
+            result=result.split('\n')
+            # Идём в цикле по переменной и сравниваем с шаблоном для поиска хостов
+            for line in result:
+
+                # Переменная для проверки, существует ли найденное устройство в списке
+                check = True
+                
+                # Заглушка, пока нет возможности определять модель wifi точки
+                model = ''
+
+                match = regex_group.search(line)
+                if match:
+
+                    # Если совпало с интересующим нас адресом - проверяем, нет ли этого длинка в списке
+                    if match.group(1) in wifis:
+
+                        for wifi_db in wifis_db:
+
+                            # Проверяем, если ли найденный адрес в базе
+                            if match.group(1) == wifi_db[0]:
+
+                                # Проверяем, совпадают ли у них мак адреса
+                                if match.group(2) == wifi_db[1]:
+
+                                    # Если всё одинаковое - выходим из цикла
+                                    check = False
+                                    break
+
+                                # Если мак адреса разные - обновляем инфо в базе
+                                else:
+                                    check = False
+                                    wifi_to_sql(match.group(1), match.group(2), model, 'UPDATE')
+
+                        # Если хоста нет в базе - добавляем его
+                        if check:
+                            wifi_to_sql(match.group(1), match.group(2), model, 'INSERT')
+
+    except:
+        mess = f"Wrong password or ZySH daemon is dead on ZyWALL {ip}"
+        write_log('check_good_wifi_zywall', '3', mess)
+        print("\nWrong password or ZySH daemon is dead on ZyWALL", ip)
+        return False
+
+
+# Поиск wifi точки на микротике
+def check_good_wifi_mikrotik(ip, wifis_db, user=USER, password=PASSWORD):
+
+    # Шаблон для запуска пинга с сервера
+    massive=['ping', '-c', '2', '-n', '']
+
+    # Создаём переменную для подключения к микротику
+    method = (plain, )
+
+    # Делим адрес на октеты и создаём с ними список для пинга
+    net = ip.split('.')
+    wifis = [f'172.{net[1]}.{net[2]}.10', f'172.{net[1]}.{net[2]}.11',  f'172.{net[1]}.{net[2]}.12']
+
+    try:
+
+        # Пингуем список адресов с сервера, чтобы на микротике появились арпы с мак-адресами
+        for ip_ping in wifis:
+            massive[4]=(ip_ping)
+            result = subprocess.run([*massive], stdout=subprocess.PIPE, encoding='utf-8')
+
+        print(f'\nChecking host {ip}')
+
+        # Создаём переменную для подключения к микротику
+        api = connect(username = user, password = password, host = ip, login_methods = method, port = 8728)
+
+        # Забираем через неё арп-таблицу
+        result = api('/ip/arp/print')
+
+        # Идём по полученному списку и проверяем, входят ли адреса в интересующий нас список
+        for line in result:
+
+            # Переменная для проверки, существует ли найденное устройство в списке
+            check = True
+                
+            # Заглушка, пока нет возможности определять модель wifi точки
+            model = ''
+
+            if line['address'] in wifis:
+                try:
+
+                    # Если такой адрес находится, проверяем, есть ли у него мак адрес
+                    if line['mac-address']:
+
+                        for wifi_db in wifis_db:
+
+                            # Проверяем, если ли найденный адрес в базе
+                            if line['address'] == wifi_db[0]:
+
+                                # Проверяем, совпадают ли у них мак адреса
+                                if line['mac-address'] == wifi_db[1]:
+
+                                    # Если всё одинаковое - выходим из цикла
+                                    check = False
+                                    break
+
+                                # Если мак адреса разные - обновляем инфо в базе
+                                else:
+                                    check = False
+                                    wifi_to_sql(line['address'], line['mac-address'], model, 'UPDATE')
+
+                        # Если хоста нет в базе - добавляем его
+                        if check:
+                                    wifi_to_sql(line['address'], line['mac-address'], model, 'INSERT')
+
+                except:
+                    pass
+
+        print(f"Done with host {ip}")
+
+    except:
+        mess = f"Somethink wrong with MikroTik {ip}"
+        write_log('check_good_wifi_mikrotik', '3', mess)
+        return False
+
+
+# Проверка, на каком интерфейсе ZyWALL поднят ipsec
+def check_ipsec_zywall(ip, user = USER, password = PASSWORD):
+
+    """
+    Проверяет инет на зиволе, принимает ip, логин и пароль.
+    Возвращает список с результатами или False.
+    """
+
+    # Переменная для временного хранения результатов
+    interfaces = []
+
+    # Пробуем подключиться к хосту через ssh и выполнить команду
+    try:
+        with pexpect.spawn('ssh {}@{}'.format(user, ip), timeout=60) as ssh:
+            ssh.expect('Password:')
+            ssh.sendline(password)
+
+            try:
+                ssh.expect('[>]')
+                time.sleep(0.5)
+
+                # Выводим арп-таблицу
+                ssh.sendline('show interface all')
+                ssh.expect('[>]')
+                time.sleep(0.5)
+
+                # Сохраняем её в переменную
+                result=ssh.before.decode('ascii').split('\n')
+
+            except pexpect.exceptions.TIMEOUT:
+                return False
+
+            # Опускаем первые две строки и идём по остальным, проверяя совпадения
+            for line in result[2:]:
+                match = re.search('\d* +(\S+) +(\S+ \S+|\S+) *([\w.]+) *([\w.]+) *\D+', line)
+
+                # Если совпадение обнаружено - добавляем интерфейс в список
+                if match and match.group(2) != 'n/' and match.group(2) != 'Inactive' and match.group(2) != 'connected':
+
+                    interfaces.append([match.group(1), match.group(2), match.group(3), match.group(4)])
+
+            # Выводим vpn-gateway подключения
+            ssh.sendline('show isakmp sa')
+            ssh.expect('[>]')
+            time.sleep(0.5)
+
+            # Сохраняем её в переменную
+            result=ssh.before.decode('ascii').split('\n')
+
+            # Идём по строкам ответа и проверяем, какой ip интерфейса в них
+            for line in result:
+                for inter in interfaces:
+                    if inter[2] in line:
+                        return inter
+
+    except:
+        mess = f"Something wrong on the ZyWALL {ip} while checking the ipsec"
+        write_log('check_ipsec_zywall', '3', mess)
+        return
+
+
+# Проверка, на каком интерфейсе MikroTik поднят ipsec
+def check_ipsec_mikrotik(ip, user = USER, password = PASSWORD):
+
+    """
+    Проверка активных портов на зиволе, принимает ip хоста, логин и пароль.
+    Возвращает сумму всех активных портов и ван портов или False в случае ошибки.
+    """
+    try:
+        # Создаём переменную для подключения к микротику
+        method = (plain, )
+
+        # Создаём переменную для подключения к микротику
+        api = connect(username = user, password = password, host = ip, login_methods = method, port = 8728)
+
+        # Забираем таблицы интерфейсов и ipsec-ов
+        interfaces = api('/ip/address/print')
+        ipsec = api('/ip/ipsec/installed-sa/print')
+
+        # Меняем генератор на обычный список
+        interface = [x for x in interfaces]
+
+        # Идём по списку поднятых ipsec
+        for line in ipsec:
+
+            # Проверяем, на каком адресе висит и возвращаем ответ
+            for inter in interface:
+
+                if inter['address'][:-3] == line['src-address'].split(':')[0]:
+                    return inter
+
+    except:
+        mess = f"Something wrong on the MikroTik {ip} while checking the ipsec"
+        write_log('check_ipsec_mikrotik', '3', mess)
+        return False
+
+
+# Проверка, на каком канале сидит роутер
+def check_ipsec_active(ip, model, debug=False):
+
+    """
+    Проверка роутеров, не сидят ли они на USB модеме, принимает ip и модель.
+    Возвращает True или False в зависимости от результата
+    """
+    try:
+        # Подключаемся к базе и получаем прошлый список с активными инет-интерфейсами
+        cursor = connect_to_DB()
+        old_inter = get_inet_inter(cursor, ip)
+
+        # Идём в зависимости от модели
+        if 'ZyWALL' in model:
+
+            # Получаем список инет-интерфейсов
+            result = check_inet_zywall(ip)
+
+            # Соединяем их в одну строку с разделителем
+            inter=';'.join(x[1] for x in result if x[-1] == 'Жив')
+
+            # Получаем интерфейс, с которого поднят IP SEC
+            ipsec = check_ipsec_zywall(ip)
+
+            # Если в базе не было этого хоста или записей о нём - вставляем новые данные
+            if not old_inter and inter:
+                inter_to_sql(cursor, ip, inter, 'INSERT')
+                old_inter = get_inet_inter(cursor, ip)
+
+            # Если новые данные не соответствуют старым
+            elif old_inter != inter:
+                inter_to_sql(cursor, ip, inter, 'UPDATE')
+
+            # Если инет-интерфейсов больше одного и IP SEC поднят на USB модеме - действуем
+            if len(inter.split(';')) > 1 and 'cellular' in ipsec[0]:
+                print(f"IP SEC на хосте {ip} поднят с {ipsec[0]} {ipsec[2]}, хотя активны {inter}")
+                mess = f"IP SEC на хосте {ip} поднят с {ipsec[0]} {ipsec[2]}, хотя активны {inter}"
+                write_log('check_ipsec_active', '3', mess)
+
+            # Если было больше одного интерфейса, а остался один, и это USB модем - действуем
+            elif (len(old_inter.split(';')) > 1 and
+                  len(inter.split(';')) == 1 and
+                  'cellular' in ipsec[0]):
+
+                print(f"На роутере {ip} отвалился основной канал, пыхтим на {ipsec[0]}!")
+                mess = f"На роутере {ip} отвалился основной канал, пыхтим на {ipsec[0]}!"
+                write_log('check_ipsec_active', '3', mess)
+
+            if debug:
+                print(f"С хостом {ip} {model} всё ок {inter}, {ipsec[0]}")
+
+
+        # Всё аналогично для микрота
+        elif 'MikroTik' in model:
+
+            result = check_inet_mikrotik(ip)
+            inter=';'.join(x[1] for x in result if x[-1] == 'Жив')
+
+            ipsec = check_ipsec_mikrotik(ip)
+
+            if not old_inter:
+                inter_to_sql(cursor, ip, inter, 'INSERT')
+                old_inter = get_inet_inter(cursor, ip)
+
+            elif old_inter != inter:
+                inter_to_sql(cursor, ip, inter, 'UPDATE')
+
+            if len(inter.split(';')) > 1 and (ipsec['interface'] == 'ppp-3g' or ipsec['interface'] == 'lte1'):
+                print(f"IP SEC на хосте {ip} поднят с {ipsec['interface']} {ipsec['address'][:-3]}, хотя активны {inter}")
+                mess = f"IP SEC на хосте {ip} поднят с {ipsec['interface']} {ipsec['address'][:-3]}, хотя активны {inter}"
+                write_log('check_ipsec_active', '3', mess)
+
+            elif (len(old_inter.split(';')) > 1 and
+                  len(inter.split(';')) == 1 and
+                  (ipsec['interface'] == 'ppp-3g' or ipsec['interface'] == 'lte1' or ipsec['interface'] == 'ppp-out1')):
+
+                print(f"На роутере {ip} отвалился основной канал, пыхтим на {ipsec['interface']}!")
+                mess = f"На роутере {ip} отвалился основной канал, пыхтим на {ipsec['interface']}!"
+                write_log('check_ipsec_active', '3', mess)
+
+            if debug:
+                print(f"С хостом {ip} {model} всё ок {inter}, {ipsec['interface']}")
+
+        cursor.close()
+        return True
+
+    except:
+        mess = f"Some error on the host {ip} while trying to check ipsec"
+        write_log('check_ipsec_active', '2', mess)
+        print(f"На хосте {ip} что-то пошло не так")
+        cursor.close()
+        return False
+
+
+# Проверка, активно ли устройство
+def check_active_device(device, ip, active):
+
+    """
+    Проверка в сети ли устройств, принимает уровень устройства, ip адрес и текущее значение активности.
+    Пишет результаты в базу, может вернуть ошибку.
+    """
+    try:
+
+        # Пингуем устройство и получаем результат
+        result = ping_host(ip)
+
+        # Если пингов нет - прибавляем к имеющемуся числу 1 и пишем в базу
+        if not result:
+            active = int(active) + 1
+            active_to_sql(device, ip, active)
+
+        # Если пинги есть, проверяем, были ли они в прошлый раз
+        else:
+
+            # Если пингов не было - перезаписываем значение
+            if active:
+                active_to_sql(device, ip, 0)
+
+    except:
+        mess = f"Some error on the host {ip} while trying to get activity"
+        write_log('check_active_device', '2', mess)
+        return False
+
 
 
 if __name__ == '__main__':
